@@ -9,10 +9,14 @@ import (
 	"net/http"
 )
 
-type FileInfo struct {
-	Name    string
-	Size    int
-	PreHash string
+type FileInfo interface {
+	Name() string
+	Size() int64
+}
+
+type FileStat struct {
+	Name string
+	Size int64
 }
 
 type partInfo struct {
@@ -27,7 +31,7 @@ type fileProof struct {
 	Name          string      `json:"name"`
 	Type          string      `json:"type"`
 	CheckNameMode string      `json:"check_name_mode"`
-	Size          int         `json:"size"`
+	Size          int64       `json:"size"`
 	PreHash       string      `json:"pre_hash"`
 }
 
@@ -60,18 +64,19 @@ type UploadResponse struct {
 
 const (
 	MaxPartSize = 1024 * 1024 * 1024 // 10M
-	FakeUA      = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36"
-
-	ApiCreateFileWithProof = "https://api.aliyundrive.com/v2/file/create_with_proof"
-	ApiCompleteUpload      = "https://api.aliyundrive.com/v2/file/complete"
 )
 
 var (
-	ErrCreateFileWithProof = errors.New("ap create_with_proof failed")
+	ErrCreateFileWithProof = errors.New("api create_with_proof failed")
 	ErrUploadPart          = errors.New("upload part file failed")
 )
 
-func (d *AliyunDriver) Upload(ctx context.Context, parentID string, info *FileInfo, f io.Reader) (*UploadResponse, error) {
+func (d *AliyunDriver) Upload(parentID string, info FileInfo, f io.Reader) (*UploadResponse, error) {
+	ctx := context.Background()
+	return d.UploadWithContext(ctx, parentID, info, f)
+}
+
+func (d *AliyunDriver) UploadWithContext(ctx context.Context, parentID string, info FileInfo, f io.Reader) (*UploadResponse, error) {
 	proof := d.newFileProof(parentID, info)
 	proofResp, err := d.createFileWithProof(ctx, proof)
 	if err != nil {
@@ -89,21 +94,26 @@ func (d *AliyunDriver) Upload(ctx context.Context, parentID string, info *FileIn
 	return d.complieteUpload(ctx, proofResp)
 }
 
-func (d *AliyunDriver) newFileProof(parentID string, info *FileInfo) *fileProof {
+func (d *AliyunDriver) newFileProof(parentID string, info FileInfo) *fileProof {
+	name, size := info.Name(), info.Size()
 	p := &fileProof{
-		DriveID:       d.config.DriveID,
-		PartInfoList:  makePartInfoList(info.Size),
+		DriveID:       d.driveID,
+		PartInfoList:  makePartInfoList(size),
 		ParentFileID:  parentID,
-		Name:          info.Name,
+		Name:          name,
 		Type:          "file",
 		CheckNameMode: "auto_rename",
-		Size:          info.Size,
-		PreHash:       info.PreHash,
+		Size:          size,
+		PreHash:       "",
 	}
 	return p
 }
 
 func (d *AliyunDriver) createFileWithProof(ctx context.Context, p *fileProof) (*createProofResponse, error) {
+	token, err := d.getToken(ctx)
+	if err != nil {
+		return nil, err
+	}
 	body := new(bytes.Buffer)
 	if err := json.NewEncoder(body).Encode(p); err != nil {
 		return nil, err
@@ -115,7 +125,7 @@ func (d *AliyunDriver) createFileWithProof(ctx context.Context, p *fileProof) (*
 	setRequestHeader(request.Header)
 	request.Header.Set("content-type", "application/json;charset=UTF-8")
 	request.Header.Set("accept", "application/json, text/plain, */*")
-	request.Header.Set("authorization", "Bearer "+d.config.Token)
+	request.Header.Set("authorization", "Bearer "+token)
 	resp, err := d.httpClient.Do(request)
 	if resp != nil && resp.Body != nil {
 		defer resp.Body.Close()
@@ -166,9 +176,13 @@ func (d *AliyunDriver) uploadPart(ctx context.Context, api string, p io.Reader) 
 }
 
 func (d *AliyunDriver) complieteUpload(ctx context.Context, pr *createProofResponse) (*UploadResponse, error) {
+	token, err := d.getToken(ctx)
+	if err != nil {
+		return nil, err
+	}
 	body := new(bytes.Buffer)
-	err := json.NewEncoder(body).Encode(map[string]string{
-		"drive_id":  d.config.DriveID,
+	err = json.NewEncoder(body).Encode(map[string]string{
+		"drive_id":  d.driveID,
 		"upload_id": pr.UploadID,
 		"file_id":   pr.FileID,
 	})
@@ -182,7 +196,7 @@ func (d *AliyunDriver) complieteUpload(ctx context.Context, pr *createProofRespo
 	setRequestHeader(request.Header)
 	request.Header.Set("content-type", "application/json;charset=UTF-8")
 	request.Header.Set("accept", "application/json, text/plain, */*")
-	request.Header.Set("authorization", "Bearer "+d.config.Token)
+	request.Header.Set("authorization", "Bearer "+token)
 	resp, err := d.httpClient.Do(request)
 	if resp != nil && resp.Body != nil {
 		defer resp.Body.Close()
@@ -199,12 +213,12 @@ func (d *AliyunDriver) complieteUpload(ctx context.Context, pr *createProofRespo
 	return uploadResp, nil
 }
 
-func makePartInfoList(size int) []*partInfo {
+func makePartInfoList(size int64) []*partInfo {
 	partInfoNum := 0
 	if size%MaxPartSize > 0 {
 		partInfoNum++
 	}
-	partInfoNum += size / MaxPartSize
+	partInfoNum += int(size / MaxPartSize)
 	list := make([]*partInfo, partInfoNum)
 	for i := 0; i < partInfoNum; i++ {
 		list[i] = &partInfo{
@@ -214,12 +228,8 @@ func makePartInfoList(size int) []*partInfo {
 	return list
 }
 
-func setRequestHeader(header http.Header) {
-	header.Set("origin", "https://www.aliyundrive.com")
-	header.Set("referer", "https://www.aliyundrive.com/")
-	header.Set("pragma", "no-cache")
-	header.Set("dnt", "1")
-	header.Set("cache-control", "no-cache")
-	header.Set("user-agent", FakeUA)
-	header.Set("accept-language", "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7,zh-TW;q=0.6")
+func (r *UploadResponse) String() string {
+	buffer := new(bytes.Buffer)
+	json.NewEncoder(buffer).Encode(r)
+	return buffer.String()
 }
