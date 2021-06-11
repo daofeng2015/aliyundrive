@@ -14,9 +14,9 @@ type FileInfo interface {
 	Size() int64
 }
 
-type FileStat struct {
-	Name string
-	Size int64
+type fileStat struct {
+	name string
+	size int64
 }
 
 type partInfo struct {
@@ -232,4 +232,15 @@ func (r *UploadResponse) String() string {
 	buffer := new(bytes.Buffer)
 	json.NewEncoder(buffer).Encode(r)
 	return buffer.String()
+}
+
+func NewFileInfo(name string, size int64) FileInfo {
+	return &fileStat{name:name, size: size}
+}
+
+func (f *fileStat) Name() string{
+	return f.name
+}
+func  (f *fileStat) Size() int64 {
+	return f.size
 }
