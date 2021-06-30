@@ -77,7 +77,7 @@ func (d *Drive) getToken(ctx context.Context) (string, error) {
 		return d.token, nil
 	}
 
-	body := strings.NewReader(`{"refresh_token":"` + d.refreshToken + `"}`)
+	body := strings.NewReader(`{"refresh_token":"` + d.refreshToken + `,"grant_type":"refresh_token""}`)
 	request, err := http.NewRequestWithContext(ctx, "POST", apiRefreshToken, body)
 	if err != nil {
 		return "", err

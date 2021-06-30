@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	apiRefreshToken        = "https://websv.aliyundrive.com/token/refresh"
+	apiRefreshToken        = "https://auth.aliyundrive.com/v2/account/token"
 	apiList                = "https://api.aliyundrive.com/v2/file/list"
 	apiCreateFileWithProof = "https://api.aliyundrive.com/v2/file/create_with_proof"
 	apiCompleteUpload      = "https://api.aliyundrive.com/v2/file/complete"
