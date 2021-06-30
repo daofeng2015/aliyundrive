@@ -110,7 +110,7 @@ func (d *AliyunDrive) UploadWithContext(ctx context.Context, parentID string, f 
 		}
 	}
 
-	return d.complieteUpload(ctx, proofResp)
+	return d.completeUpload(ctx, proofResp)
 }
 
 func makePartInfoList(size int64) []*partInfo {
@@ -184,7 +184,7 @@ func (d *AliyunDrive) uploadPart(ctx context.Context, api string, p io.Reader) e
 	return ErrUploadPart
 }
 
-func (d *AliyunDrive) complieteUpload(ctx context.Context, pr *createProofResponse) (*UploadResponse, error) {
+func (d *AliyunDrive) completeUpload(ctx context.Context, pr *createProofResponse) (*UploadResponse, error) {
 	token, err := d.getToken(ctx)
 	if err != nil {
 		return nil, err
