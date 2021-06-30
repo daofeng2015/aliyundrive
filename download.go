@@ -4,9 +4,56 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 )
+
+func (d *AliyunDrive) DownloadLocalFile(fileID string, target string) (int64, error) {
+	ctx := context.Background()
+	return d.DownloadLocalFileWithContext(ctx, fileID, target)
+}
+
+func (d *AliyunDrive) DownloadLocalFileWithContext(ctx context.Context, fileID string, target string) (int64, error) {
+	targetFile, err := os.Create(target)
+	if err != nil {
+		return 0, err
+	}
+	defer targetFile.Close()
+	remoteReader, err := d.DownloadWithContext(ctx, fileID)
+	if err != nil {
+		return 0, err
+	}
+	defer remoteReader.Close()
+	return io.Copy(targetFile, remoteReader)
+}
+
+func (d *AliyunDrive) Download(fileID string) (io.ReadCloser, error) {
+	ctx := context.Background()
+	return d.DownloadWithContext(ctx, fileID)
+}
+
+func (d *AliyunDrive) DownloadWithContext(ctx context.Context, fileID string) (io.ReadCloser, error) {
+	downloadURL, err := d.GetDownloadURLWithContext(ctx, fileID)
+	if err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequest("GET", downloadURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	setCommonRequestHeader(request.Header)
+	resp, err := d.httpClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, ErrUnexpectedStatusCode
+	}
+	return resp.Body, nil
+}
 
 func (d *AliyunDrive) GetDownloadURL(fileID string) (string, error) {
 	ctx := context.Background()
