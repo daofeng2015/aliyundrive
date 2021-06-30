@@ -78,7 +78,7 @@ func (d *Drive) GetItem(fileID string) (*Item, error) {
 	if err := d.setRequestHeaderAuth(request.Header); err != nil {
 		return nil, err
 	}
-	resp, err := d.DoRequestBytes(request)
+	resp,_, err := d.DoRequestBytes(request)
 	if err != nil {
 		return nil, err
 	}

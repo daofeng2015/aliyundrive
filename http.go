@@ -76,12 +76,12 @@ func (d *Drive) setRequestHeaderAuthWithContext(ctx context.Context, header http
 	return nil
 }
 
-func (d *Drive) DoRequestBytes(request *http.Request) ([]byte, error) {
+func (d *Drive) DoRequestBytes(request *http.Request) ([]byte,int, error) {
 	resp, err := d.httpClient.Do(request)
 	if err != nil {
-		return nil, err
+		return nil,0, err
 	}
 	data, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	return data, err
+	return data,resp.StatusCode, err
 }

@@ -117,7 +117,7 @@ func (d *Drive) ListItems(parentID string, marker string, opts ...lsOptionSetter
 			return retv, err
 		}
 
-		resp, err := d.DoRequestBytes(request)
+		resp,_, err := d.DoRequestBytes(request)
 		if err != nil {
 			return retv, err
 		}
@@ -159,7 +159,7 @@ func (d *Drive) MkDir(parentFileID string, name string) (*Item, error) {
 	if err := d.setRequestHeaderAuth(request.Header); err != nil {
 		return nil, err
 	}
-	resp, err := d.DoRequestBytes(request)
+	resp,_, err := d.DoRequestBytes(request)
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (d *Drive) Remove(fileID string, force bool) error {
 	if err := d.setRequestHeaderAuth(request.Header); err != nil {
 		return err
 	}
-	resp, err := d.DoRequestBytes(request)
+	resp,_, err := d.DoRequestBytes(request)
 	if err != nil {
 		return err
 	}
@@ -256,7 +256,7 @@ func (d *Drive) BatchRemove(fileIDList []string, force bool) ([]error, error) {
 	if err := d.setRequestHeaderAuth(request.Header); err != nil {
 		return nil, err
 	}
-	resp, err := d.DoRequestBytes(request)
+	resp,_, err := d.DoRequestBytes(request)
 	if err != nil {
 		return nil, err
 	}

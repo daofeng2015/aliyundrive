@@ -119,7 +119,7 @@ func (d *Drive) createFileWithProof(ctx context.Context, p *fileProof) (*createP
 	if err := d.setRequestHeaderAuthWithContext(ctx, request.Header); err != nil {
 		return nil, err
 	}
-	resp, err := d.DoRequestBytes(request)
+	resp,_, err := d.DoRequestBytes(request)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (d *Drive) completeUpload(ctx context.Context, pr *createProofResponse) (*I
 	if err := d.setRequestHeaderAuthWithContext(ctx, request.Header); err != nil {
 		return nil, err
 	}
-	resp, err := d.DoRequestBytes(request)
+	resp,_, err := d.DoRequestBytes(request)
 	if err != nil {
 		return nil, err
 	}

@@ -84,9 +84,12 @@ func (d *Drive) getToken(ctx context.Context) (string, error) {
 	}
 	setCommonRequestHeader(request.Header)
 	setJSONRequestHeader(request.Header)
-	resp, err := d.DoRequestBytes(request)
+	resp,code,err := d.DoRequestBytes(request)
 	if err != nil {
 		return "", err
+	}
+	if code !=200{
+		return "refresh_token err",err
 	}
 
 	ret := &struct {
