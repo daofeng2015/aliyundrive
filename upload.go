@@ -33,37 +33,16 @@ type createProofResponse struct {
 	PartInfoList []*partInfo `json:"part_info_list"`
 }
 
-type UploadResponse struct {
-	FileID          string `json:"file_id"`
-	Name            string `json:"name"`
-	ContentType     string `json:"content_type"`
-	CreatedAt       string `json:"created_at"`
-	UpdatedAt       string `json:"updated_at"`
-	FileExtension   string `json:"file_extension"`
-	Hidden          bool   `json:"hidden"`
-	Size            int    `json:"size"`
-	Starred         bool   `json:"starred"`
-	Status          string `json:"status"`
-	UploadID        string `json:"upload_id"`
-	ParentFileID    string `json:"parent_file_id"`
-	CRC64Hash       string `json:"crc64_hash"`
-	ContentHash     string `json:"content_hash"`
-	ContentHashName string `json:"content_hash_name"`
-	Category        string `json:"category"`
-	EncryptMode     string `json:"encrypt_mode"`
-	Location        string `json:"location"`
-}
-
 const (
 	MaxPartSize = 1024 * 1024 * 1024 // 10M
 )
 
-func (d *AliyunDrive) UploadLocalFile(parentID string, p string) (*UploadResponse, error) {
+func (d *Drive) UploadFromLocalFile(parentID string, p string) (*Item, error) {
 	ctx := context.Background()
-	return d.UploadLocalFileWithContext(ctx, parentID, p)
+	return d.UploadFromLocalFileWithContext(ctx, parentID, p)
 }
 
-func (d *AliyunDrive) UploadLocalFileWithContext(ctx context.Context, parentID string, p string) (*UploadResponse, error) {
+func (d *Drive) UploadFromLocalFileWithContext(ctx context.Context, parentID string, p string) (*Item, error) {
 	file, err := os.Open(p)
 	if err != nil {
 		return nil, err
@@ -71,12 +50,12 @@ func (d *AliyunDrive) UploadLocalFileWithContext(ctx context.Context, parentID s
 	return d.UploadWithContext(ctx, parentID, file)
 }
 
-func (d *AliyunDrive) Upload(parentID string, f fs.File) (*UploadResponse, error) {
+func (d *Drive) Upload(parentID string, f fs.File) (*Item, error) {
 	ctx := context.Background()
 	return d.UploadWithContext(ctx, parentID, f)
 }
 
-func (d *AliyunDrive) UploadWithContext(ctx context.Context, parentID string, f fs.File) (*UploadResponse, error) {
+func (d *Drive) UploadWithContext(ctx context.Context, parentID string, f fs.File) (*Item, error) {
 	fileInfo, err := f.Stat()
 	if err != nil {
 		return nil, err
@@ -128,22 +107,18 @@ func makePartInfoList(size int64) []*partInfo {
 	return list
 }
 
-func (d *AliyunDrive) createFileWithProof(ctx context.Context, p *fileProof) (*createProofResponse, error) {
-	token, err := d.getToken(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (d *Drive) createFileWithProof(ctx context.Context, p *fileProof) (*createProofResponse, error) {
 	body, err := json.Marshal(p)
 	if err != nil {
 		return nil, err
 	}
-	request, err := http.NewRequestWithContext(ctx, "POST", ApiCreateFileWithProof, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, "POST", apiCreateFileWithProof, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	setCommonRequestHeader(request.Header)
-	setJSONRequestHeader(request.Header)
-	request.Header.Set("Authorization", "Bearer "+token)
+	if err := d.setRequestHeaderAuthWithContext(ctx, request.Header); err != nil {
+		return nil, err
+	}
 	resp, err := d.DoRequestBytes(request)
 	if err != nil {
 		return nil, err
@@ -167,7 +142,7 @@ func (d *AliyunDrive) createFileWithProof(ctx context.Context, p *fileProof) (*c
 	return proofResp, nil
 }
 
-func (d *AliyunDrive) uploadPart(ctx context.Context, api string, p io.Reader) error {
+func (d *Drive) uploadPart(ctx context.Context, api string, p io.Reader) error {
 	request, err := http.NewRequestWithContext(ctx, "PUT", api, p)
 	if err != nil {
 		return err
@@ -184,11 +159,7 @@ func (d *AliyunDrive) uploadPart(ctx context.Context, api string, p io.Reader) e
 	return ErrUploadPart
 }
 
-func (d *AliyunDrive) completeUpload(ctx context.Context, pr *createProofResponse) (*UploadResponse, error) {
-	token, err := d.getToken(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (d *Drive) completeUpload(ctx context.Context, pr *createProofResponse) (*Item, error) {
 	body, err := json.Marshal(Object{
 		"drive_id":  d.driveID,
 		"upload_id": pr.UploadID,
@@ -197,19 +168,20 @@ func (d *AliyunDrive) completeUpload(ctx context.Context, pr *createProofRespons
 	if err != nil {
 		return nil, err
 	}
-	request, err := http.NewRequestWithContext(ctx, "POST", ApiCompleteUpload, bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, "POST", apiCompleteUpload, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
-	setCommonRequestHeader(request.Header)
-	setJSONRequestHeader(request.Header)
-	request.Header.Set("Authorization", "Bearer "+token)
+
+	if err := d.setRequestHeaderAuthWithContext(ctx, request.Header); err != nil {
+		return nil, err
+	}
 	resp, err := d.DoRequestBytes(request)
 	if err != nil {
 		return nil, err
 	}
 
-	uploadResp := &UploadResponse{}
+	uploadResp := &Item{}
 	if err := json.Unmarshal(resp, uploadResp); err != nil {
 		return nil, err
 	}

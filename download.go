@@ -1,27 +1,26 @@
 package aliyundrive
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"strings"
 )
 
-func (d *AliyunDrive) DownloadLocalFile(fileID string, target string) (int64, error) {
+func (d *Drive) DownloadToLocalFile(fileID string, target string) (int64, error) {
 	ctx := context.Background()
-	return d.DownloadLocalFileWithContext(ctx, fileID, target)
+	return d.DownloadToLocalFileWithContext(ctx, fileID, target)
 }
 
-func (d *AliyunDrive) DownloadLocalFileWithContext(ctx context.Context, fileID string, target string) (int64, error) {
+func (d *Drive) DownloadToLocalFileWithContext(ctx context.Context, fileID string, target string) (int64, error) {
 	targetFile, err := os.Create(target)
 	if err != nil {
 		return 0, err
 	}
 	defer targetFile.Close()
-	remoteReader, err := d.DownloadWithContext(ctx, fileID)
+	remoteReader, err := d.OpenItemFileWithContext(ctx, fileID)
 	if err != nil {
 		return 0, err
 	}
@@ -29,17 +28,20 @@ func (d *AliyunDrive) DownloadLocalFileWithContext(ctx context.Context, fileID s
 	return io.Copy(targetFile, remoteReader)
 }
 
-func (d *AliyunDrive) Download(fileID string) (io.ReadCloser, error) {
+func (d *Drive) OpenItemFile(fileID string) (io.ReadCloser, error) {
 	ctx := context.Background()
-	return d.DownloadWithContext(ctx, fileID)
+	return d.OpenItemFileWithContext(ctx, fileID)
 }
 
-func (d *AliyunDrive) DownloadWithContext(ctx context.Context, fileID string) (io.ReadCloser, error) {
-	downloadURL, err := d.GetDownloadURLWithContext(ctx, fileID)
+func (d *Drive) OpenItemFileWithContext(ctx context.Context, fileID string) (io.ReadCloser, error) {
+	item, err := d.GetItem(fileID)
 	if err != nil {
 		return nil, err
 	}
-	request, err := http.NewRequest("GET", downloadURL, nil)
+	if item.Type != "file" {
+		return nil, ErrOpenItemNotFile
+	}
+	request, err := http.NewRequest("GET", item.DownloadURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -55,38 +57,34 @@ func (d *AliyunDrive) DownloadWithContext(ctx context.Context, fileID string) (i
 	return resp.Body, nil
 }
 
-func (d *AliyunDrive) GetDownloadURL(fileID string) (string, error) {
-	ctx := context.Background()
-	return d.GetDownloadURLWithContext(ctx, fileID)
-}
+func (d *Drive) GetItem(fileID string) (*Item, error) {
+	params := Object{
+		"drive_id":                d.driveID,
+		"file_id":                 fileID,
+		"image_thumbnail_process": "image/resize,w_400/format,jpeg",
+		"image_url_process":       "image/resize,w_1920/format,jpeg",
+		"video_thumbnail_process": "video/snapshot,t_0,f_jpg,ar_auto,w_300",
+		"url_expire_sec":          1600,
+	}
 
-func (d *AliyunDrive) GetDownloadURLWithContext(ctx context.Context, fileID string) (string, error) {
-	token, err := d.getToken(ctx)
+	body, err := json.Marshal(params)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	params := fmt.Sprintf(`{"drive_id":"%v","file_id":"%v"}`, d.driveID, fileID)
-	request, err := http.NewRequestWithContext(ctx,
-		"POST", ApiGetDownloadURL, strings.NewReader(params))
+	request, err := http.NewRequest("POST", apiFileGet, bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	setCommonRequestHeader(request.Header)
-	setJSONRequestHeader(request.Header)
-	request.Header.Set("Authorization", "Bearer "+token)
+	if err := d.setRequestHeaderAuth(request.Header); err != nil {
+		return nil, err
+	}
 	resp, err := d.DoRequestBytes(request)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	ret := &struct {
-		URL string `json:"url"`
-	}{}
+	ret := &Item{}
 	if err := json.Unmarshal(resp, ret); err != nil {
-		return "", err
+		return nil, err
 	}
-	if len(ret.URL) == 0 {
-		return "", ErrGetDownloadURL
-	}
-	return ret.URL, nil
+	return ret, nil
 }

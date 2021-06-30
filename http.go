@@ -1,6 +1,7 @@
 package aliyundrive
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"net"
@@ -9,12 +10,17 @@ import (
 )
 
 const (
-	ApiRefreshToken        = "https://websv.aliyundrive.com/token/refresh"
-	ApiCreateFileWithProof = "https://api.aliyundrive.com/v2/file/create_with_proof"
-	ApiCompleteUpload      = "https://api.aliyundrive.com/v2/file/complete"
-	ApiGetDownloadURL      = "https://api.aliyundrive.com/v2/file/get_download_url"
+	apiRefreshToken        = "https://websv.aliyundrive.com/token/refresh"
+	apiList                = "https://api.aliyundrive.com/v2/file/list"
+	apiCreateFileWithProof = "https://api.aliyundrive.com/v2/file/create_with_proof"
+	apiCompleteUpload      = "https://api.aliyundrive.com/v2/file/complete"
+	apiFileGet             = "https://api.aliyundrive.com/v2/file/get"
+	apiCreateWithFolder    = "https://api.aliyundrive.com/adrive/v2/file/createWithFolders"
+	apiTrash               = "https://api.aliyundrive.com/v2/recyclebin/trash"
+	apiDelete              = "https://api.aliyundrive.com/v3/file/delete"
+	apiBatch               = "https://api.aliyundrive.com/v2/batch"
 
-	FakeUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36"
+	fakeUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36"
 )
 
 func newHttpClient() *http.Client {
@@ -45,7 +51,7 @@ func setCommonRequestHeader(header http.Header) {
 	header.Set("pragma", "no-cache")
 	header.Set("dnt", "1")
 	header.Set("cache-control", "no-cache")
-	header.Set("user-agent", FakeUA)
+	header.Set("user-agent", fakeUA)
 	header.Set("accept-language", "zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7,zh-TW;q=0.6")
 }
 
@@ -54,7 +60,23 @@ func setJSONRequestHeader(header http.Header) {
 	header.Set("accept", "application/json, text/plain, */*")
 }
 
-func (d *AliyunDrive) DoRequestBytes(request *http.Request) ([]byte, error) {
+func (d *Drive) setRequestHeaderAuth(header http.Header) error {
+	ctx := context.Background()
+	return d.setRequestHeaderAuthWithContext(ctx, header)
+}
+
+func (d *Drive) setRequestHeaderAuthWithContext(ctx context.Context, header http.Header) error {
+	token, err := d.getToken(ctx)
+	if err != nil {
+		return err
+	}
+	setCommonRequestHeader(header)
+	setJSONRequestHeader(header)
+	header.Set("Authorization", "Bearer "+token)
+	return nil
+}
+
+func (d *Drive) DoRequestBytes(request *http.Request) ([]byte, error) {
 	resp, err := d.httpClient.Do(request)
 	if err != nil {
 		return nil, err

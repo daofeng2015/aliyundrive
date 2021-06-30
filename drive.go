@@ -11,17 +11,50 @@ import (
 type Object = map[string]interface{}
 type Array = []Object
 
-type AliyunDrive struct {
+type Drive struct {
 	refreshToken    string
 	token           string
 	tokenExpireTime int64
 	driveID         string
+	rootID          string
 	httpClient      *http.Client
 }
 
-func NewWithRefreshToken(refreshToken string) (*AliyunDrive, error) {
-	d := &AliyunDrive{
+type Item struct {
+	DriveID         string    `json:"drive_id"`
+	DomainID        string    `json:"domain_id"`
+	UploadID        string    `json:"upload_id"`
+	FileID          string    `json:"file_id"`
+	ParentFileID    string    `json:"parent_file_id"`
+	Name            string    `json:"name"`
+	FileExtension   string    `json:"file_extension"`
+	Size            uint64    `json:"size"`
+	Type            string    `json:"type"`
+	ContentType     string    `json:"content_type"`
+	MimeExtension   string    `json:"mime_extension"`
+	MimeType        string    `json:"mime_type"`
+	Category        string    `json:"category"`
+	Hidden          bool      `json:"hidden"`
+	Status          string    `json:"status"`
+	Starred         bool      `json:"starred"`
+	Trashed         bool      `json:"trashed"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	EncryptMode     string    `json:"encrypt_mode"`
+	Location        string    `json:"location"`
+	CRC64Hash       string    `json:"crc64_hash"`
+	ContentHash     string    `json:"content_hash"`
+	ContentHashName string    `json:"content_hash_name"`
+	URL             string    `json:"url"`
+	DownloadURL     string    `json:"download_url"`
+	Thumbnail       string    `json:"thumbnail"`
+	Labels          []string  `json:"labels"`
+}
+
+func NewWithRefreshToken(refreshToken string) (*Drive, error) {
+	d := &Drive{
 		refreshToken: refreshToken,
+		rootID:       "root",
 		httpClient:   newHttpClient(),
 	}
 	if _, err := d.getToken(context.Background()); err != nil {
@@ -30,14 +63,22 @@ func NewWithRefreshToken(refreshToken string) (*AliyunDrive, error) {
 	return d, nil
 }
 
-func (d *AliyunDrive) getToken(ctx context.Context) (string, error) {
+func (d *Drive) SetRootID(rootID string) {
+	d.rootID = rootID
+}
+
+func (d *Drive) GetRootID() string {
+	return d.rootID
+}
+
+func (d *Drive) getToken(ctx context.Context) (string, error) {
 	now := time.Now().Unix()
 	if len(d.token) > 0 && now > d.tokenExpireTime {
 		return d.token, nil
 	}
 
 	body := strings.NewReader(`{"refresh_token":"` + d.refreshToken + `"}`)
-	request, err := http.NewRequestWithContext(ctx, "POST", ApiRefreshToken, body)
+	request, err := http.NewRequestWithContext(ctx, "POST", apiRefreshToken, body)
 	if err != nil {
 		return "", err
 	}
